@@ -198,7 +198,8 @@ if __name__ == "__main__":
     parser.add_argument("--logo-scale", type=float, default=0.312, help="Logo size as fraction of QR (0.0-0.5)")
     parser.add_argument("--box-size", type=int, default=10)
     parser.add_argument("--border", type=int, default=6)
-    parser.add_argument("--autotune-min-ecc", type=float, help="Autotune: minimum ECC percent to keep (0-30). If set, script will find largest logo scale that preserves at least this ECC")
+    parser.add_argument("--autotune-min-ecc", type=float, default=0.15, help="Autotune: minimum ECC percent to keep (0-30). Default 0.15 (15%). Script will find largest logo scale that preserves at least this ECC")
+    parser.add_argument("--no-autotune", action="store_true", help="Disable autotune even if --autotune-min-ecc is set; use provided --logo-scale instead")
     parser.add_argument("--autotune-start", type=float, default=0.05, help="Autotune start scale")
     parser.add_argument("--autotune-tol", type=float, default=0.01, help="Autotune tolerance (stopping criteria for binary search)")
     parser.add_argument("--autotune-max", type=float, default=0.6, help="Autotune max scale to try")
@@ -246,7 +247,8 @@ if __name__ == "__main__":
     if (not args.logo) and cfg.get('logo'):
         logo_val = cfg.get('logo')
 
-    if args.autotune_min_ecc is not None:
+    # Run autotune by default when --autotune-min-ecc is set, unless user opts out
+    if args.autotune_min_ecc is not None and not args.no_autotune:
         if not args.logo:
             print("Autotune requires --logo path to be provided.")
         else:

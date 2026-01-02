@@ -13,6 +13,9 @@ param(
 $repo = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 Set-Location $repo
 
+# Image name used for build/run when creating or using existing image
+$ImageName = 'qrcode-logo:local'
+
 # Normalize long-form flags passed as --no-build or --rebuild in RemainingArgs
 if ($RemainingArgs -and $RemainingArgs.Count -gt 0) {
     $cleanArgs = @()
@@ -30,24 +33,24 @@ if (-not (Test-Path -Path "output")) {
 
 if ($NoBuild) {
     Write-Host "Skipping docker build as requested (--no-build)"
-    $imgId = (& docker images -q qr-generator) -join "" | ForEach-Object { $_.Trim() }
+    $imgId = (& docker images -q $ImageName) -join "" | ForEach-Object { $_.Trim() }
     if (-not $imgId) {
-        Write-Error "Image 'qr-generator' not found. Run without --no-build to build the image or use --rebuild."
+        Write-Error "Image '$ImageName' not found. Run without --no-build to build the image or use --rebuild."
         exit 1
     }
 } else {
     $needBuild = $true
     if (-not $Rebuild) {
-        $imgId = (& docker images -q qr-generator) -join "" | ForEach-Object { $_.Trim() }
+        $imgId = (& docker images -q $ImageName) -join "" | ForEach-Object { $_.Trim() }
         if ($imgId) {
-            Write-Host "Using existing image 'qr-generator' (skip build). Use --rebuild to force rebuild."
+            Write-Host "Using existing image '$ImageName' (skip build). Use --rebuild to force rebuild."
             $needBuild = $false
         }
     }
 
     if ($needBuild) {
-        Write-Host "Building Docker image 'qr-generator'..."
-        $bproc = Start-Process -FilePath 'docker' -ArgumentList @('build','-t','qr-generator','.') -NoNewWindow -Wait -PassThru
+        Write-Host "Building Docker image '$ImageName'..."
+        $bproc = Start-Process -FilePath 'docker' -ArgumentList @('build','-t',$ImageName,'.') -NoNewWindow -Wait -PassThru
         if ($bproc.ExitCode -ne 0) {
             Write-Error "Docker build failed. Ensure Docker is installed and running."
             exit 1
@@ -66,7 +69,7 @@ if ($RemainingArgs -and $RemainingArgs.Count -gt 0) {
     $pythonArgs = @('--out-svg','/output/test_qr.svg','--out-pdf','/output/test_qr.pdf')
 }
 
-$dockerArgs = @('run','--rm','-v',"${pwdPath}:/app",'-v',"${pwdPath}\\output:/output",'qr-generator','python','/app/generate_qr_sheet.py') + $pythonArgs
+$dockerArgs = @('run','--rm','-v',"${pwdPath}:/app",'-v',"${pwdPath}\\output:/output",$ImageName,'python','/app/generate_qr_sheet.py') + $pythonArgs
 
 $proc = Start-Process -FilePath 'docker' -ArgumentList $dockerArgs -NoNewWindow -Wait -PassThru
 $exit = $proc.ExitCode

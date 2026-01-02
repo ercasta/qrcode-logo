@@ -162,7 +162,6 @@ def make_sheet(contents: List[str], out_svg: str, out_pdf: str = None, cut_guide
                 convert_cmd = shutil.which('convert')
                 chosen_cmd = magick_cmd
                 if not chosen_cmd and convert_cmd:
-                    import os
                     # On Windows, C:\Windows\System32\convert.exe is the filesystem converter
                     # and NOT ImageMagick. Ignore that one to avoid accidental use.
                     convert_dir = os.path.normcase(os.path.dirname(convert_cmd))

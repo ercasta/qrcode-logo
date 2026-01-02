@@ -3,6 +3,7 @@ import re
 import argparse
 import base64
 import os
+import sys
 from typing import List
 
 try:
@@ -34,152 +35,12 @@ def strip_outer_svg(svg_text: str):
     return svg_text
 
 
-def make_sheet(contents: List[str], out_svg: str, out_pdf: str = None, cut_guides: bool = True):
-
-    # A4 in mm
-    A4_W = 210.0
-    A4_H = 297.0
-    margin = 10.0
-    cols = 4
-    rows = 5
-
-    usable_w = A4_W - 2 * margin
-    usable_h = A4_H - 2 * margin
-    cell_size = min(usable_w / cols, usable_h / rows)
-
-    fragments = []
-    # Try to load local config for logo settings if available
-    logo_path = None
-    logo_scale = None
-    cfg_path = 'qr_config.yaml'
-    if os.path.exists(cfg_path):
-        try:
-            if yaml:
-                with open(cfg_path, 'r', encoding='utf-8') as f:
-                    cfg = yaml.safe_load(f) or {}
-            else:
-                # minimal fallback parsing
-                cfg = {}
-                with open(cfg_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        if ':' in line:
-                            k, v = line.split(':', 1)
-                            cfg[k.strip()] = v.strip().strip('"\'')
-        except Exception:
-            cfg = {}
-
-        if cfg.get('logo'):
-            logo_path = cfg.get('logo')
-        if cfg.get('logo_scale'):
-            try:
-                logo_scale = float(cfg.get('logo_scale'))
-            except Exception:
-                logo_scale = None
-
-    # Use qrcode + Pillow to produce PNGs, then embed as data URIs in the SVG
-    for c in contents:
-        qr_img = make_qr_image(c, logo_path=logo_path, logo_scale=(logo_scale if logo_scale is not None else 0.312))
-        buf = io.BytesIO()
-        qr_img.save(buf, format='PNG')
-        data = base64.b64encode(buf.getvalue()).decode('ascii')
-        fragments.append(data)
-
-    svg_lines = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{A4_W}mm" height="{A4_H}mm" viewBox="0 0 {A4_W} {A4_H}">',
-        f'<rect width="100%" height="100%" fill="#ffffff"/>',
-    ]
-
-    # Draw cut guides (dashed rectangles for each cell)
-    if cut_guides:
-        guide_stroke = 0.25  # mm
-        dash = "2,2"
-        for r in range(rows):
-            for c in range(cols):
-                gx = margin + c * cell_size
-                gy = margin + r * cell_size
-                svg_lines.append(
-                    f'<rect x="{gx:.6f}" y="{gy:.6f}" width="{cell_size:.6f}" height="{cell_size:.6f}" fill="none" stroke="#000000" stroke-width="{guide_stroke}mm" stroke-dasharray="{dash}"/>'
-                )
-
-    for idx, data in enumerate(fragments):
-        col = idx % cols
-        row = idx // cols
-        x_mm = margin + col * cell_size
-        y_mm = margin + row * cell_size
-        svg_lines.append(f'<image x="{x_mm:.6f}mm" y="{y_mm:.6f}mm" width="{cell_size:.6f}mm" height="{cell_size:.6f}mm" href="data:image/png;base64,{data}" preserveAspectRatio="xMidYMid meet"/>' )
-
-    # Optional: small corner crop marks (outside each cell)
-    if cut_guides:
-        mark_len = min(7.0, cell_size * 0.2)
-        mark_stroke = 0.4
-        for r in range(rows):
-            for c in range(cols):
-                gx = margin + c * cell_size
-                gy = margin + r * cell_size
-                x2 = gx + cell_size
-                y2 = gy + cell_size
-                # top-left
-                svg_lines.append(f'<line x1="{gx - mark_len:.6f}" y1="{gy:.6f}" x2="{gx + (mark_len*0.2):.6f}" y2="{gy:.6f}" stroke="#000" stroke-width="{mark_stroke}mm"/>')
-                svg_lines.append(f'<line x1="{gx:.6f}" y1="{gy - mark_len:.6f}" x2="{gx:.6f}" y2="{gy + (mark_len*0.2):.6f}" stroke="#000" stroke-width="{mark_stroke}mm"/>')
-                # top-right
-                svg_lines.append(f'<line x1="{x2 - (mark_len*0.2):.6f}" y1="{gy:.6f}" x2="{x2 + mark_len:.6f}" y2="{gy:.6f}" stroke="#000" stroke-width="{mark_stroke}mm"/>')
-                svg_lines.append(f'<line x1="{x2:.6f}" y1="{gy - mark_len:.6f}" x2="{x2:.6f}" y2="{gy + (mark_len*0.2):.6f}" stroke="#000" stroke-width="{mark_stroke}mm"/>')
-                # bottom-left
-                svg_lines.append(f'<line x1="{gx - mark_len:.6f}" y1="{y2:.6f}" x2="{gx + (mark_len*0.2):.6f}" y2="{y2:.6f}" stroke="#000" stroke-width="{mark_stroke}mm"/>')
-                svg_lines.append(f'<line x1="{gx:.6f}" y1="{y2 - (mark_len*0.2):.6f}" x2="{gx:.6f}" y2="{y2 + mark_len:.6f}" stroke="#000" stroke-width="{mark_stroke}mm"/>')
-                # bottom-right
-                svg_lines.append(f'<line x1="{x2 - (mark_len*0.2):.6f}" y1="{y2:.6f}" x2="{x2 + mark_len:.6f}" y2="{y2:.6f}" stroke="#000" stroke-width="{mark_stroke}mm"/>')
-                svg_lines.append(f'<line x1="{x2:.6f}" y1="{y2 - (mark_len*0.2):.6f}" x2="{x2:.6f}" y2="{y2 + mark_len:.6f}" stroke="#000" stroke-width="{mark_stroke}mm"/>')
-
-    svg_lines.append('</svg>')
-    svg_content = '\n'.join(svg_lines)
-
-    with open(out_svg, 'w', encoding='utf-8') as f:
-        f.write(svg_content)
-
-    if out_pdf:
-        # Try cairosvg first, then fall back to Inkscape or ImageMagick if available
-        try:
-            import cairosvg
-
-            cairosvg.svg2pdf(bytestring=svg_content.encode('utf-8'), write_to=out_pdf)
-            print(f'PDF created: {out_pdf} (via cairosvg)')
-        except Exception:
-            import shutil
-            import subprocess
-
-            # prefer inkscape if present
-            inkscape_cmd = shutil.which('inkscape') or shutil.which('inkscape.com')
-            if inkscape_cmd:
-                try:
-                    subprocess.check_call([inkscape_cmd, out_svg, '--export-type=pdf', '--export-filename', out_pdf])
-                    print(f'PDF created: {out_pdf} (via Inkscape)')
-                except Exception as e:
-                    print('Inkscape failed to convert SVG to PDF:', e)
-            else:
-                # try ImageMagick (magick) as last resort
-                magick_cmd = shutil.which('magick')
-                convert_cmd = shutil.which('convert')
-                chosen_cmd = magick_cmd
-                if not chosen_cmd and convert_cmd:
-                    # On Windows, C:\Windows\System32\convert.exe is the filesystem converter
-                    # and NOT ImageMagick. Ignore that one to avoid accidental use.
-                    convert_dir = os.path.normcase(os.path.dirname(convert_cmd))
-                    if not convert_dir.endswith(os.path.normcase('\\windows\\system32')):
-                        chosen_cmd = convert_cmd
-
-                if chosen_cmd:
-                    try:
-                        # ImageMagick: `magick input.svg output.pdf` or `convert input.svg output.pdf`
-                        subprocess.check_call([chosen_cmd, out_svg, out_pdf])
-                        print(f'PDF created: {out_pdf} (via ImageMagick)')
-                    except Exception as e:
-                        print('ImageMagick failed to convert SVG to PDF:', e)
-                else:
-                    print('No SVG-to-PDF converter available; install cairosvg, Inkscape, or ImageMagick to enable PDF output')
+# Note: sheet generation has been removed. This script now supports only template
+# filling via `--template`. The previous `make_sheet` implementation was intentionally
+# discarded to simplify the tool and ensure template-only behavior.
 
 
-def fill_template_with_qr(template_path: str, data: str, out_svg: str, logo_path: str = None, logo_scale: float = None):
+def fill_template_with_qr(template_path: str, data: str, out_svg: str, logo_path: str = None, logo_scale: float = None, out_png: str = None):
     """Replace the element with id="placeholder" in `template_path` with an embedded PNG QR image.
 
     The placeholder is typically a <rect> inside a reusable group; replacing it in the group
@@ -210,6 +71,14 @@ def fill_template_with_qr(template_path: str, data: str, out_svg: str, logo_path
     qr_img.save(buf, format='PNG')
     b64 = base64.b64encode(buf.getvalue()).decode('ascii')
 
+    # If requested, write the single QR PNG to disk (the one embedded in the template)
+    if out_png:
+        try:
+            qr_img.save(out_png, format='PNG')
+            print(f'Single QR PNG saved: {out_png}')
+        except Exception as e:
+            print(f'Failed to save single QR PNG {out_png}: {e}')
+
     coord_attrs = []
     if x is not None:
         coord_attrs.append(f'x="{x}"')
@@ -229,12 +98,15 @@ def fill_template_with_qr(template_path: str, data: str, out_svg: str, logo_path
 
     print(f'Template filled: {out_svg}')
 
+    # Note: single QR PNG is already written earlier (via `out_png` param using `make_qr_image`).
+
 
 def main():
     parser = argparse.ArgumentParser(description='Generate A4 SVG/PDF with 20 QR codes')
     parser.add_argument('--count', type=int, default=20)
     parser.add_argument('--out-svg', default='qr_sheet.svg')
     parser.add_argument('--out-pdf', default='qr_sheet.pdf')
+    parser.add_argument('--out-png', default=None, help='Write single QR PNG when using --template (path)')
     parser.add_argument('--no-pdf', dest='pdf', action='store_false')
     parser.add_argument('--from-file', help='Read one content per line from file')
     parser.add_argument('--template', help='Path to an SVG template to fill (replaces id="placeholder")')
@@ -267,6 +139,8 @@ def main():
                                 cfg[k.strip()] = v.strip().strip('"\'')
             except Exception:
                 cfg = {}
+
+            # assign logo path from config if present
             logo_path = cfg.get('logo')
             try:
                 logo_scale = float(cfg.get('logo_scale')) if cfg.get('logo_scale') else None
@@ -277,7 +151,39 @@ def main():
             if cfg_data and (not first or re.match(r'^QR-\d+$', first)):
                 first = cfg_data
 
-        fill_template_with_qr(args.template, first, args.out_svg, logo_path=logo_path, logo_scale=logo_scale)
+        # Determine outputs from config `output` base name when not overridden on CLI.
+        out_png = args.out_png
+        cfg_out = None
+        try:
+            cfg_out = cfg.get('output')
+        except Exception:
+            cfg_out = None
+
+        if cfg_out:
+            base = os.path.splitext(os.path.basename(cfg_out))[0]
+
+            # If caller didn't pass --out-svg (either `--out-svg value` or `--out-svg=value`), set to /output/<base>.svg (or local ./output)
+            if not any(s.startswith('--out-svg') for s in sys.argv):
+                if os.path.exists('/output'):
+                    args.out_svg = f'/output/{base}.svg'
+                else:
+                    args.out_svg = os.path.join(os.getcwd(), 'output', f'{base}.svg')
+
+            # If PDF output requested and caller didn't pass --out-pdf, set default
+            if args.pdf and (not any(s.startswith('--out-pdf') for s in sys.argv)):
+                if os.path.exists('/output'):
+                    args.out_pdf = f'/output/{base}.pdf'
+                else:
+                    args.out_pdf = os.path.join(os.getcwd(), 'output', f'{base}.pdf')
+
+            # Single PNG: prefer CLI --out-png; else set to /output/<base>.png
+            if not out_png:
+                if os.path.exists('/output'):
+                    out_png = f'/output/{base}.png'
+                else:
+                    out_png = os.path.join(os.getcwd(), 'output', f'{base}.png')
+
+        fill_template_with_qr(args.template, first, args.out_svg, logo_path=logo_path, logo_scale=logo_scale, out_png=out_png)
 
         if args.pdf and args.out_pdf:
             # convert to PDF using same fallback logic as make_sheet
@@ -317,7 +223,8 @@ def main():
                     else:
                         print('No SVG-to-PDF converter available; install cairosvg, Inkscape, or ImageMagick to enable PDF output')
     else:
-        make_sheet(contents, args.out_svg, args.out_pdf if args.pdf else None)
+        print("This script only supports --template mode. Provide --template with a template SVG to fill.")
+        sys.exit(2)
 
 
 if __name__ == '__main__':

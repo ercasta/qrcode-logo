@@ -62,12 +62,16 @@ Write-Host "Running container to generate files (host repo -> /app, outputs -> .
 # Map the host repo into the container at /app so the container reads config and logos from host.
 $pwdPath = ${PWD}.Path
 
-# Default args if none provided: write outputs into /output on host
+# Default args if none provided: use template mode and write outputs into /output on host
 if ($RemainingArgs -and $RemainingArgs.Count -gt 0) {
     $pythonArgs = $RemainingArgs
 } else {
-    $pythonArgs = @('--out-svg','/output/test_qr.svg','--out-pdf','/output/test_qr.pdf')
+    # Force template usage by default so the script always fills the provided SVG template
+    $pythonArgs = @('--template','/app/template_pure.svg')
 }
+
+# Do not inject output paths here; let the generator derive output filenames
+# from `qr_config.yaml` or CLI args so names remain consistent.
 
 $dockerArgs = @('run','--rm','-v',"${pwdPath}:/app",'-v',"${pwdPath}\\output:/output",$ImageName,'python','/app/generate_qr_sheet.py') + $pythonArgs
 

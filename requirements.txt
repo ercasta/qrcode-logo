@@ -1,0 +1,16 @@
+# Pinned top-level packages used by this project
+# Packages detected in the project's virtualenv
+qrcode==8.2
+Pillow==11.2.1
+opencv-python-headless==4.12.0.88
+
+# Optional/extra converters (install if you want automatic SVG->PDF conversion)
+# cairosvg is preferred for SVG->PDF inside Python
+cairosvg==2.8.2
+
+# YAML support (optional; qrcode_plain.py will fall back if not present)
+PyYAML==6.0.3
+
+# Notes:
+# - Inkscape and ImageMagick are external CLI tools (not pip packages) used
+#   as fallbacks for SVG->PDF conversion and are not listed here.

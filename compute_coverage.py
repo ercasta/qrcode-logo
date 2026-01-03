@@ -24,7 +24,21 @@ if os.path.exists(cfg_path):
         print('Failed to read config:', e)
         sys.exit(1)
 else:
-    print('No config found at qr_config.yaml')
+    sample = """# Sample QR config for compute_coverage.py
+# Set 'data' to the content or URL encoded in the QR code.
+# Set 'logo' to a path to a logo image file, or leave null.
+# 'logo_scale' controls logo relative size (0.0-1.0)
+data: "https://example.com"
+logo: null
+logo_scale: 0.312
+"""
+    try:
+        with open(cfg_path, 'w', encoding='utf-8') as f:
+            f.write(sample)
+        print(f"No config found at {cfg_path}. A sample config has been created.")
+        print(f"Please edit {cfg_path} with your values and re-run this script.")
+    except Exception as e:
+        print('Failed to create sample config:', e)
     sys.exit(1)
 
 data = cfg.get('data', 'https://example.com')

@@ -206,20 +206,26 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Ensure config exists; if not, create an example YAML config
+    # Ensure config exists; if not, create a sample YAML config and exit
     cfg_path = args.config
     if not os.path.exists(cfg_path):
-        example = {"data": "myexampleurl", "logo": "myexamplelogo"}
+        sample = """# Sample QR config for qrcode_plain.py
+# Set 'data' to the content or URL encoded in the QR code.
+# Set 'logo' to a path to a logo image file, or leave null.
+# 'logo_scale' controls logo relative size (0.0-1.0)
+data: "https://example.com"
+logo: null
+logo_scale: 0.312
+output: qr.png
+"""
         try:
-            if yaml:
-                with open(cfg_path, "w", encoding="utf-8") as f:
-                    yaml.safe_dump(example, f)
-            else:
-                with open(cfg_path, "w", encoding="utf-8") as f:
-                    f.write("data: myexampleurl\nlogo: myexamplelogo\n")
-            print(f"Created example config at {cfg_path}. Edit it to set your defaults.")
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                f.write(sample)
+            print(f"No config found at {cfg_path}. A sample config has been created.")
+            print(f"Please edit {cfg_path} with your values and re-run this script.")
         except Exception as e:
-            print(f"Failed to create example config: {e}")
+            print(f"Failed to create sample config: {e}")
+        sys.exit(1)
 
     # Load config if available
     cfg = {}

@@ -123,6 +123,25 @@ def main():
         first = contents[0] if contents else ''
         # try to read logo config if present
         cfg_path = 'qr_config.yaml'
+        # If config doesn't exist, create a sample and instruct the user, then exit
+        if not os.path.exists(cfg_path):
+            sample = """# Sample QR config for generate_qr_sheet.py
+# Set 'data' to the content or URL encoded in the QR code.
+# Set 'logo' to a path to a logo image file, or leave null.
+# 'logo_scale' controls logo relative size (0.0-1.0)
+data: "https://example.com"
+logo: null
+logo_scale: 0.312
+output: qr_sheet.svg
+"""
+            try:
+                with open(cfg_path, 'w', encoding='utf-8') as f:
+                    f.write(sample)
+                print(f"No config found at {cfg_path}. A sample config has been created.")
+                print(f"Please edit {cfg_path} with your values and re-run this script.")
+            except Exception as e:
+                print('Failed to create sample config:', e)
+            sys.exit(1)
         logo_path = None
         logo_scale = None
         if os.path.exists(cfg_path):
